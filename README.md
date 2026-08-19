@@ -111,5 +111,6 @@ See the full report for the detailed risk register and rationale.
 
 ## Contributors
 
-- Kemo Dibassy (ID: 669111)
-- Valerian 333
+- Kemo Dibassy
+- Angel Musomba
+- Valerian Murago
