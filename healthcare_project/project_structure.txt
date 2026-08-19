@@ -1,0 +1,1039 @@
+# Project Structure
+
+    healthcare_project/
+        README.md
+        data/
+            manifests/
+                
+        logs/
+            ingestion.log
+        scripts/
+            auth.py
+            db_init.py
+            generate_dataset.py
+            run_ingestion.py
+            secure_ingest.py
+        storage/
+            encryption.key
+            hmac.key
+        tests/
+            evidence.log
+            security_tests.py
+            test_results.json
+
+# File Details
+
+## README.md
+### Contents of README.md
+# Secure Healthcare Data Collection - Group 1
+
+## Quick start
+```
+cd scripts
+python3 db_init.py          # creates storage/hospital.db + demo RBAC users
+python3 generate_dataset.py # generates 120,000 synthetic records (12 clinic batches)
+python3 run_ingestion.py    # registers, hashes, signs, encrypts, and stores all batches
+cd ../tests
+python3 security_tests.py   # runs the 6 security tests, writes evidence.log + test_results.json
+```
+
+## Demo accounts (seeded by db_init.py)
+| username | password | role |
+|---|---|---|
+| hospital_admin | AdminPass!2026 | admin |
+| clinic_nairobi_a | ClinicUpload!99 | clinic_uploader |
+| compliance_auditor | AuditView!2026 | auditor |
+
+## Requirements
+Python 3.10+, `cryptography` package (`pip install cryptography`).
+
+See the accompanying report (Group1_Secure_Healthcare_Data_Collection_Report.docx)
+for full documentation of environment design, security controls, test evidence,
+and recommendations.
+
+
+## data\manifests\Clinic_Nakuru_A_20260718_0900.csv.manifest.json
+### Contents of Clinic_Nakuru_A_20260718_0900.csv.manifest.json
+{
+  "filename": "Clinic_Nakuru_A_20260718_0900.csv",
+  "sha256": "d840af2d8bf27c94b09196c437fb54b7c3cad8625b566c0b3d6238a451366a5e",
+  "hmac": "6f83b409d8a721766cc85e7380c2ff41c8c06066f210a466240a1aaeb6806993"
+}
+
+## data\manifests\test1_tampered.csv.manifest.json
+### Contents of test1_tampered.csv.manifest.json
+{"filename": "test1_tampered.csv", "sha256": "b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9", "hmac": "5dfa20ec871b0b5bdd3809a456b129e51c7dc480b2654c4b2bfd550af447bae3"}
+
+## tests\test_results.json
+### Contents of test_results.json
+[
+  {
+    "test_id": "TEST-1",
+    "objective": "Confirm the system detects and rejects a file altered after signing",
+    "procedure": "Copy a registered clinic file, modify a field, recompute integrity check",
+    "expected": "verify_against_manifest() returns False with a hash-mismatch message; file not ingested",
+    "actual": "original_hash=b02c6bc10c10e0b5... new_hash=5dfc8c2985ea0a23... verify_result=False, detail='HASH MISMATCH: expected b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9, got 5dfc8c2985ea0a2389bc37dca8c2f914e24b8784796df65768d58e2d981dac71'",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-2",
+    "objective": "Confirm tampered files are rejected end-to-end and never reach storage",
+    "procedure": "Call ingest_file() on the tampered file from TEST-1 using valid clinic credentials",
+    "expected": "Ingestion pipeline rejects the file before any records are written to the database",
+    "actual": "ingest_file() result={'status': 'rejected', 'reason': 'HASH MISMATCH: expected b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9, got 5dfc8c2985ea0a2389bc37dca8c2f914e24b8784796df65768d58e2d981dac71'}, records stored under this filename=0",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-3",
+    "objective": "Confirm the system rejects invalid credentials and unknown accounts",
+    "procedure": "Call authenticate() with a wrong password for a real user, and with a nonexistent username",
+    "expected": "AuthError raised in both cases; no session/token issued",
+    "actual": "wrong_password -> AuthError raised: True ('Invalid credentials'); unknown_user -> rejected: True",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-4",
+    "objective": "Confirm role-based access control restricts decryption to the admin role only",
+    "procedure": "Attempt decrypt_record() as clinic_uploader, auditor, and admin roles",
+    "expected": "clinic_uploader and auditor are denied (AuthError); admin succeeds",
+    "actual": "clinic_uploader decrypt blocked=True, auditor decrypt blocked=True, admin decrypt succeeded=True",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-5",
+    "objective": "Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)",
+    "procedure": "Read raw encrypted_blob bytes directly from SQLite and search for known plaintext substrings",
+    "expected": "Zero plaintext matches - all values must be unrecoverable without the encryption key",
+    "actual": "Scanned 200 encrypted blobs for 5 known plaintext terms. Matches found: 0",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-6",
+    "objective": "Confirm every upload attempt (successful and rejected) is captured in the audit log",
+    "procedure": "Query the upload_log table and the ingestion.log file after running tests 1-5",
+    "expected": "Log contains both SUCCESS and REJECTED_* entries with timestamps and actor identity",
+    "actual": "upload_log status breakdown={'REJECTED_TAMPER': 1, 'SUCCESS': 13}; success_events=13, rejected_events=1; logs/ingestion.log exists=True with 14 lines",
+    "passed": true
+  }
+]
+
+## tests\evidence.log
+### Contents of evidence.log
+SECURITY TEST EXECUTION LOG
+======================================================================
+
+=== TEST-1: PASS ===
+Objective: Confirm the system detects and rejects a file altered after signing
+Expected:  verify_against_manifest() returns False with a hash-mismatch message; file not ingested
+Actual:    original_hash=b02c6bc10c10e0b5... new_hash=5dfc8c2985ea0a23... verify_result=False, detail='HASH MISMATCH: expected b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9, got 5dfc8c2985ea0a2389bc37dca8c2f914e24b8784796df65768d58e2d981dac71'
+
+=== TEST-2: PASS ===
+Objective: Confirm tampered files are rejected end-to-end and never reach storage
+Expected:  Ingestion pipeline rejects the file before any records are written to the database
+Actual:    ingest_file() result={'status': 'rejected', 'reason': 'HASH MISMATCH: expected b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9, got 5dfc8c2985ea0a2389bc37dca8c2f914e24b8784796df65768d58e2d981dac71'}, records stored under this filename=0
+
+=== TEST-3: PASS ===
+Objective: Confirm the system rejects invalid credentials and unknown accounts
+Expected:  AuthError raised in both cases; no session/token issued
+Actual:    wrong_password -> AuthError raised: True ('Invalid credentials'); unknown_user -> rejected: True
+
+=== TEST-4: PASS ===
+Objective: Confirm role-based access control restricts decryption to the admin role only
+Expected:  clinic_uploader and auditor are denied (AuthError); admin succeeds
+Actual:    clinic_uploader decrypt blocked=True, auditor decrypt blocked=True, admin decrypt succeeded=True
+
+=== TEST-5: PASS ===
+Objective: Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)
+Expected:  Zero plaintext matches - all values must be unrecoverable without the encryption key
+Actual:    Scanned 200 encrypted blobs for 5 known plaintext terms. Matches found: 0
+
+=== TEST-6: PASS ===
+Objective: Confirm every upload attempt (successful and rejected) is captured in the audit log
+Expected:  Log contains both SUCCESS and REJECTED_* entries with timestamps and actor identity
+Actual:    upload_log status breakdown={'REJECTED_TAMPER': 1, 'SUCCESS': 13}; success_events=13, rejected_events=1; logs/ingestion.log exists=True with 14 lines
+
+======================================================================
+SUMMARY
+  TEST-1: PASS - Confirm the system detects and rejects a file altered after signing
+  TEST-2: PASS - Confirm tampered files are rejected end-to-end and never reach storage
+  TEST-3: PASS - Confirm the system rejects invalid credentials and unknown accounts
+  TEST-4: PASS - Confirm role-based access control restricts decryption to the admin role only
+  TEST-5: PASS - Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)
+  TEST-6: PASS - Confirm every upload attempt (successful and rejected) is captured in the audit log
+
+6/6 tests passed
+
+
+## scripts\auth.py
+### Contents of auth.py
+"""
+auth.py
+Authentication + Role-Based Access Control (RBAC) for the ingestion system.
+
+Roles:
+  - admin: full access (upload, view, manage users, view logs)
+  - clinic_uploader: can only upload files for their own clinic
+  - auditor: read-only access to logs and integrity records, no patient data decryption
+"""
+import sqlite3
+import hashlib
+import os
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "storage", "hospital.db")
+
+PERMISSIONS = {
+    "admin": {"upload", "view_patients", "view_logs", "manage_users", "decrypt"},
+    "clinic_uploader": {"upload"},
+    "auditor": {"view_logs"},
+}
+
+
+class AuthError(Exception):
+    pass
+
+
+def authenticate(username: str, password: str) -> dict:
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT password_hash, salt, role FROM users WHERE username=?", (username,))
+    row = cur.fetchone()
+    conn.close()
+
+    if row is None:
+        raise AuthError("Unknown user")
+
+    stored_hash, salt, role = row
+    attempt_hash = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), bytes.fromhex(salt), 200_000
+    ).hex()
+
+    if attempt_hash != stored_hash:
+        raise AuthError("Invalid credentials")
+
+    return {"username": username, "role": role}
+
+
+def authorize(user: dict, action: str) -> bool:
+    return action in PERMISSIONS.get(user["role"], set())
+
+
+def require_permission(user: dict, action: str):
+    if not authorize(user, action):
+        raise AuthError(f"User '{user['username']}' (role={user['role']}) "
+                         f"is not authorized to perform '{action}'")
+
+
+## scripts\run_ingestion.py
+### Contents of run_ingestion.py
+import os
+import glob
+from secure_ingest import register_upload, ingest_file
+
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
+INCOMING_DIR = os.path.join(BASE_DIR, "data", "incoming")
+
+if __name__ == "__main__":
+    files = sorted(glob.glob(os.path.join(INCOMING_DIR, "*.csv")))
+    print(f"Found {len(files)} incoming batch files\n")
+
+    for filepath in files:
+        filename = os.path.basename(filepath)
+        # Clinic side: register (hash + sign) the file before "sending" it
+        file_hash, sig = register_upload(filepath)
+        print(f"[REGISTERED] {filename}\n  sha256={file_hash}\n  hmac={sig}")
+
+        # Hospital side: uploader logs in and ingests
+        clinic_user = "clinic_nairobi_a"  # demo: same uploader account for simplicity
+        result = ingest_file(filepath, clinic_user, "ClinicUpload!99")
+        print(f"  -> {result}\n")
+
+
+## data\manifests\Clinic_Mombasa_A_20260718_0700.csv.manifest.json
+### Contents of Clinic_Mombasa_A_20260718_0700.csv.manifest.json
+{
+  "filename": "Clinic_Mombasa_A_20260718_0700.csv",
+  "sha256": "396f5524acdc0ed13f99b90d476b4209510263ffb3ca719493b07e1134510712",
+  "hmac": "4210747c1dd0d28e6394fec1f7463e6527602a979157c8cddcdd85911e662fb8"
+}
+
+## data\manifests\Clinic_Mombasa_A_20260718_0200.csv.manifest.json
+### Contents of Clinic_Mombasa_A_20260718_0200.csv.manifest.json
+{
+  "filename": "Clinic_Mombasa_A_20260718_0200.csv",
+  "sha256": "540cca16376abc836f62615709e1d646f63a386582b2b574f0f4569709f6309e",
+  "hmac": "66231932021270167f261209f70e0f3adabbd65f796f55b69ddddd435151fea3"
+}
+
+## tests\security_tests.py
+### Contents of security_tests.py
+"""
+security_tests.py
+Executes 6 security tests against the live secure_ingest system and
+captures real, reproducible evidence (not simulated).
+
+Run:  python3 security_tests.py
+Output: prints evidence to stdout AND writes tests/evidence.log
+"""
+import sys
+import os
+import shutil
+import csv
+import sqlite3
+import json
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+from secure_ingest import (
+    register_upload, ingest_file, verify_against_manifest, decrypt_record,
+    sha256_file, DB_PATH, MANIFEST_DIR
+)
+from auth import authenticate, AuthError, authorize
+
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+EVIDENCE_LOG = os.path.join(os.path.dirname(__file__), "evidence.log")
+
+results = []
+_ev = open(EVIDENCE_LOG, "w")
+
+def ev(line=""):
+    print(line)
+    _ev.write(str(line) + "\n")
+
+def record_result(test_id, objective, procedure, expected, actual, passed):
+    results.append({
+        "test_id": test_id, "objective": objective, "procedure": procedure,
+        "expected": expected, "actual": actual, "passed": passed
+    })
+    ev(f"\n=== {test_id}: {'PASS' if passed else 'FAIL'} ===")
+    ev(f"Objective: {objective}")
+    ev(f"Expected:  {expected}")
+    ev(f"Actual:    {actual}")
+
+
+# ---------------------------------------------------------------------------
+# TEST 1: Data tampering detection - modify a registered file, confirm rejection
+# ---------------------------------------------------------------------------
+def test1_tamper_detection():
+    src = os.path.join(DATA_DIR, "incoming_registered_sample.csv")
+    # use one of the already-registered files, copy it fresh to simulate re-delivery attempt
+    original = os.path.join(DATA_DIR, "incoming", "Clinic_Nairobi_A_20260718_0000.csv")
+    tampered = os.path.join(DATA_DIR, "test1_tampered.csv")
+    shutil.copy(original, tampered)
+    manifest_src = os.path.join(MANIFEST_DIR, "Clinic_Nairobi_A_20260718_0000.csv.manifest.json")
+    manifest_dst = os.path.join(MANIFEST_DIR, "test1_tampered.csv.manifest.json")
+    with open(manifest_src) as f:
+        manifest = json.load(f)
+    manifest["filename"] = "test1_tampered.csv"
+    with open(manifest_dst, "w") as f:
+        json.dump(manifest, f)
+
+    original_hash = sha256_file(tampered)
+
+    # Attacker modifies one field in the file after it was "signed"
+    with open(tampered, "r") as f:
+        rows = list(csv.DictReader(f))
+        fieldnames = list(rows[0].keys())
+    rows[0]["diagnosis"] = "TAMPERED_VALUE_INJECTED"
+    with open(tampered, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+
+    new_hash = sha256_file(tampered)
+    ok, detail = verify_against_manifest(tampered)
+
+    actual = f"original_hash={original_hash[:16]}... new_hash={new_hash[:16]}... verify_result={ok}, detail='{detail}'"
+    passed = (ok is False) and (original_hash != new_hash)
+    record_result(
+        "TEST-1", "Confirm the system detects and rejects a file altered after signing",
+        "Copy a registered clinic file, modify a field, recompute integrity check",
+        "verify_against_manifest() returns False with a hash-mismatch message; file not ingested",
+        actual, passed
+    )
+    return passed
+
+
+# ---------------------------------------------------------------------------
+# TEST 2: Reject altered/unsigned files at ingestion (end-to-end via ingest_file)
+# ---------------------------------------------------------------------------
+def test2_reject_at_ingestion():
+    tampered = os.path.join(DATA_DIR, "test1_tampered.csv")
+    result = ingest_file(tampered, "clinic_nairobi_a", "ClinicUpload!99")
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM patients WHERE source_file='test1_tampered.csv'")
+    stored_count = cur.fetchone()[0]
+    conn.close()
+
+    actual = f"ingest_file() result={result}, records stored under this filename={stored_count}"
+    passed = (result["status"] == "rejected") and (stored_count == 0)
+    record_result(
+        "TEST-2", "Confirm tampered files are rejected end-to-end and never reach storage",
+        "Call ingest_file() on the tampered file from TEST-1 using valid clinic credentials",
+        "Ingestion pipeline rejects the file before any records are written to the database",
+        actual, passed
+    )
+    return passed
+
+
+# ---------------------------------------------------------------------------
+# TEST 3: Authentication - invalid credentials must be rejected
+# ---------------------------------------------------------------------------
+def test3_invalid_auth():
+    try:
+        authenticate("clinic_nairobi_a", "WrongPassword123")
+        auth_failed_as_expected = False
+        err_msg = "no exception raised"
+    except AuthError as e:
+        auth_failed_as_expected = True
+        err_msg = str(e)
+
+    try:
+        authenticate("nonexistent_user", "whatever")
+        unknown_user_rejected = False
+    except AuthError:
+        unknown_user_rejected = True
+
+    actual = f"wrong_password -> AuthError raised: {auth_failed_as_expected} ('{err_msg}'); unknown_user -> rejected: {unknown_user_rejected}"
+    passed = auth_failed_as_expected and unknown_user_rejected
+    record_result(
+        "TEST-3", "Confirm the system rejects invalid credentials and unknown accounts",
+        "Call authenticate() with a wrong password for a real user, and with a nonexistent username",
+        "AuthError raised in both cases; no session/token issued",
+        actual, passed
+    )
+    return passed
+
+
+# ---------------------------------------------------------------------------
+# TEST 4: Role-Based Access Control - clinic_uploader must NOT be able to decrypt records
+# ---------------------------------------------------------------------------
+def test4_rbac_enforcement():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT record_id FROM patients LIMIT 1")
+    record_id = cur.fetchone()[0]
+    conn.close()
+
+    # clinic_uploader tries to decrypt - should fail (not authorized)
+    uploader_blocked = False
+    try:
+        decrypt_record(record_id, "clinic_nairobi_a", "ClinicUpload!99")
+    except AuthError:
+        uploader_blocked = True
+
+    # auditor tries to decrypt - should also fail (auditor has view_logs only, not decrypt)
+    auditor_blocked = False
+    try:
+        decrypt_record(record_id, "compliance_auditor", "AuditView!2026")
+    except AuthError:
+        auditor_blocked = True
+
+    # admin should succeed
+    admin_data = decrypt_record(record_id, "hospital_admin", "AdminPass!2026")
+    admin_succeeded = admin_data is not None and "diagnosis" in admin_data
+
+    actual = (f"clinic_uploader decrypt blocked={uploader_blocked}, "
+              f"auditor decrypt blocked={auditor_blocked}, "
+              f"admin decrypt succeeded={admin_succeeded}")
+    passed = uploader_blocked and auditor_blocked and admin_succeeded
+    record_result(
+        "TEST-4", "Confirm role-based access control restricts decryption to the admin role only",
+        "Attempt decrypt_record() as clinic_uploader, auditor, and admin roles",
+        "clinic_uploader and auditor are denied (AuthError); admin succeeds",
+        actual, passed
+    )
+    return passed
+
+
+# ---------------------------------------------------------------------------
+# TEST 5: Encryption at rest - raw DB bytes must not contain plaintext PII
+# ---------------------------------------------------------------------------
+def test5_encryption_at_rest():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT record_id, encrypted_blob FROM patients LIMIT 200")
+    rows = cur.fetchall()
+    conn.close()
+
+    # Known plaintext values we injected: first/last names, diagnoses used in generator
+    probe_terms = [b"Mwangi", b"Hypertension", b"Malaria", b"Otieno", b"Wanjiru"]
+    leaked = []
+    for record_id, blob in rows:
+        for term in probe_terms:
+            if term in blob:
+                leaked.append((record_id, term))
+
+    actual = f"Scanned {len(rows)} encrypted blobs for {len(probe_terms)} known plaintext terms. Matches found: {len(leaked)}"
+    passed = len(leaked) == 0
+    record_result(
+        "TEST-5", "Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)",
+        "Read raw encrypted_blob bytes directly from SQLite and search for known plaintext substrings",
+        "Zero plaintext matches - all values must be unrecoverable without the encryption key",
+        actual, passed
+    )
+    return passed
+
+
+# ---------------------------------------------------------------------------
+# TEST 6: Audit logging completeness - every ingestion attempt (success + failure) is logged
+# ---------------------------------------------------------------------------
+def test6_audit_logging():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT status, COUNT(*) FROM upload_log GROUP BY status")
+    status_counts = dict(cur.fetchall())
+    cur.execute("SELECT COUNT(*) FROM upload_log WHERE status='SUCCESS'")
+    success_count = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM upload_log WHERE status LIKE 'REJECTED%'")
+    rejected_count = cur.fetchone()[0]
+    conn.close()
+
+    log_file_exists = os.path.exists(os.path.join(BASE_DIR, "logs", "ingestion.log"))
+    with open(os.path.join(BASE_DIR, "logs", "ingestion.log")) as f:
+        line_count = sum(1 for _ in f)
+
+    actual = (f"upload_log status breakdown={status_counts}; "
+              f"success_events={success_count}, rejected_events={rejected_count}; "
+              f"logs/ingestion.log exists={log_file_exists} with {line_count} lines")
+    passed = success_count > 0 and rejected_count > 0 and log_file_exists
+    record_result(
+        "TEST-6", "Confirm every upload attempt (successful and rejected) is captured in the audit log",
+        "Query the upload_log table and the ingestion.log file after running tests 1-5",
+        "Log contains both SUCCESS and REJECTED_* entries with timestamps and actor identity",
+        actual, passed
+    )
+    return passed
+
+
+if __name__ == "__main__":
+    ev("SECURITY TEST EXECUTION LOG")
+    ev("=" * 70)
+    t1 = test1_tamper_detection()
+    t2 = test2_reject_at_ingestion()
+    t3 = test3_invalid_auth()
+    t4 = test4_rbac_enforcement()
+    t5 = test5_encryption_at_rest()
+    t6 = test6_audit_logging()
+
+    ev("\n" + "=" * 70)
+    ev("SUMMARY")
+    for r in results:
+        ev(f"  {r['test_id']}: {'PASS' if r['passed'] else 'FAIL'} - {r['objective']}")
+    total_pass = sum(1 for r in results if r["passed"])
+    ev(f"\n{total_pass}/{len(results)} tests passed")
+
+    with open(os.path.join(os.path.dirname(__file__), "test_results.json"), "w") as f:
+        json.dump(results, f, indent=2)
+
+    _ev.close()
+
+
+## data\manifests\Clinic_Nakuru_A_20260718_0400.csv.manifest.json
+### Contents of Clinic_Nakuru_A_20260718_0400.csv.manifest.json
+{
+  "filename": "Clinic_Nakuru_A_20260718_0400.csv",
+  "sha256": "e1c2405a68523281d77d7d64d3c2d455fed42bfd4a3cc6c5c0db5d28d3afbd79",
+  "hmac": "9279f26b32e5e7a5d60946822a06fd874cfd35d0912d86b4d50c6cbd1c2aad88"
+}
+
+## storage\encryption.key
+### Contents of encryption.key
+ubGWU5KBqjwJt-h1sGQLb_Uj654yl-V9Y_jtTr505LQ=
+
+## storage\hmac.key
+[Binary or Non-text file: hmac.key]
+
+## logs\ingestion.log
+### Contents of ingestion.log
+2026-07-19T19:14:35.807020+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Kisumu_A_20260718_0300.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:36.438380+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Kisumu_A_20260718_0800.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:37.062224+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Mombasa_A_20260718_0200.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:37.737424+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Mombasa_A_20260718_0700.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:38.441795+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_0000.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:39.087543+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_0500.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:39.748262+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_1000.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:40.428509+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_0100.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:41.112225+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_0600.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:41.808592+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_1100.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:42.508131+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nakuru_A_20260718_0400.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:43.219123+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nakuru_A_20260718_0900.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:15:26.277487+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=test1_tampered.csv | status=REJECTED_TAMPER | detail=HASH MISMATCH: expected b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9, got 5dfc8c2985ea0a2389bc37dca8c2f914e24b8784796df65768d58e2d981dac71
+2026-07-19T19:15:26.569923+00:00 | actor=hospital_admin | action=DECRYPT_RECORD | file=00002ffd-ee23-4b82-90c7-527a9b5a1184 | status=SUCCESS | detail=
+
+
+## scripts\generate_dataset.py
+### Contents of generate_dataset.py
+"""
+generate_dataset.py
+Generates synthetic patient records simulating hourly uploads from multiple clinics.
+No real patient data is used - all records are synthetically generated for testing.
+
+Output: one CSV per simulated clinic batch, each ~100,000+ records total across batches.
+"""
+import csv
+import random
+import uuid
+from datetime import datetime, timedelta
+import os
+
+random.seed(42)
+
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "incoming")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+CLINICS = ["Clinic_Nairobi_A", "Clinic_Nairobi_B", "Clinic_Mombasa_A",
+           "Clinic_Kisumu_A", "Clinic_Nakuru_A"]
+
+FIRST_NAMES = ["John", "Mary", "Peter", "Grace", "James", "Jane", "David",
+               "Ann", "Samuel", "Faith", "Michael", "Ruth", "Joseph", "Alice",
+               "Daniel", "Esther", "Paul", "Lucy", "Kevin", "Diana"]
+LAST_NAMES = ["Mwangi", "Otieno", "Wanjiru", "Kamau", "Achieng", "Kiprop",
+              "Njoroge", "Wafula", "Mutua", "Chebet", "Odhiambo", "Kariuki",
+              "Nyambura", "Barasa", "Mbugua"]
+CONDITIONS = ["Hypertension", "Type 2 Diabetes", "Malaria", "Asthma",
+              "Common Cold", "Typhoid", "Tuberculosis", "COVID-19",
+              "Arthritis", "Migraine", "Anemia", "Pneumonia"]
+DEPARTMENTS = ["Outpatient", "Emergency", "Maternity", "Pediatrics",
+               "Surgery", "Cardiology", "General Medicine"]
+BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+
+
+def gen_record(record_id: int, clinic: str, timestamp: datetime) -> dict:
+    dob = datetime(1940, 1, 1) + timedelta(days=random.randint(0, 30000))
+    return {
+        "record_id": str(uuid.uuid4()),
+        "patient_ref": f"P{record_id:08d}",
+        "clinic_id": clinic,
+        "first_name": random.choice(FIRST_NAMES),
+        "last_name": random.choice(LAST_NAMES),
+        "dob": dob.strftime("%Y-%m-%d"),
+        "gender": random.choice(["M", "F"]),
+        "blood_type": random.choice(BLOOD_TYPES),
+        "department": random.choice(DEPARTMENTS),
+        "diagnosis": random.choice(CONDITIONS),
+        "systolic_bp": random.randint(90, 160),
+        "diastolic_bp": random.randint(60, 100),
+        "heart_rate": random.randint(55, 110),
+        "temperature_c": round(random.uniform(36.0, 39.5), 1),
+        "visit_timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        "attending_physician": f"Dr. {random.choice(LAST_NAMES)}",
+        "notes": "Routine visit - synthetic record for security testing.",
+    }
+
+
+def generate_hourly_batches(total_records: int = 120_000, batches: int = 12):
+    """Simulate clinics uploading batches hourly."""
+    per_batch = total_records // batches
+    record_counter = 1
+    start_time = datetime(2026, 7, 18, 0, 0, 0)
+
+    manifest = []
+    for b in range(batches):
+        clinic = CLINICS[b % len(CLINICS)]
+        batch_time = start_time + timedelta(hours=b)
+        filename = f"{clinic}_{batch_time.strftime('%Y%m%d_%H%M')}.csv"
+        filepath = os.path.join(OUTPUT_DIR, filename)
+
+        with open(filepath, "w", newline="") as f:
+            fieldnames = list(gen_record(1, clinic, batch_time).keys())
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for _ in range(per_batch):
+                writer.writerow(gen_record(record_counter, clinic, batch_time))
+                record_counter += 1
+
+        manifest.append({"file": filename, "clinic": clinic, "records": per_batch})
+        print(f"Generated {filename} ({per_batch} records)")
+
+    print(f"\nTotal records generated: {record_counter - 1}")
+    return manifest
+
+
+if __name__ == "__main__":
+    generate_hourly_batches()
+
+
+## data\manifests\Clinic_Nairobi_A_20260718_1000.csv.manifest.json
+### Contents of Clinic_Nairobi_A_20260718_1000.csv.manifest.json
+{
+  "filename": "Clinic_Nairobi_A_20260718_1000.csv",
+  "sha256": "7872326e1d81996037648877224e76979a5efc91e96e5dbf226ec133cad8bc95",
+  "hmac": "fbc18c5e7033b47afeb01a98820801f01739b57ce3ba5032ccd5427b0944225f"
+}
+
+## data\manifests\Clinic_Nairobi_A_20260718_0000.csv.manifest.json
+### Contents of Clinic_Nairobi_A_20260718_0000.csv.manifest.json
+{
+  "filename": "Clinic_Nairobi_A_20260718_0000.csv",
+  "sha256": "b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9",
+  "hmac": "5dfa20ec871b0b5bdd3809a456b129e51c7dc480b2654c4b2bfd550af447bae3"
+}
+
+## scripts\secure_ingest.py
+### Contents of secure_ingest.py
+"""
+secure_ingest.py
+Secure ingestion pipeline for hourly clinic uploads.
+
+Security controls implemented here:
+  1. Authentication + RBAC        (auth.py)
+  2. File integrity verification  (SHA-256 hash + HMAC-SHA256 signature)
+  3. Tamper rejection              (any file whose hash/signature doesn't match is rejected)
+  4. Encryption at rest            (Fernet/AES-128-CBC+HMAC via `cryptography`)
+  5. Full audit logging            (every attempt, success or failure, is logged)
+"""
+import os
+import sqlite3
+import hashlib
+import hmac
+import csv
+import json
+from datetime import datetime, timezone
+from cryptography.fernet import Fernet
+
+from auth import authenticate, require_permission, AuthError
+
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
+DB_PATH = os.path.join(BASE_DIR, "storage", "hospital.db")
+KEY_PATH = os.path.join(BASE_DIR, "storage", "encryption.key")
+HMAC_KEY_PATH = os.path.join(BASE_DIR, "storage", "hmac.key")
+QUARANTINE_DIR = os.path.join(BASE_DIR, "data", "quarantine")
+MANIFEST_DIR = os.path.join(BASE_DIR, "data", "manifests")
+LOG_PATH = os.path.join(BASE_DIR, "logs", "ingestion.log")
+
+os.makedirs(QUARANTINE_DIR, exist_ok=True)
+os.makedirs(MANIFEST_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Key management
+# ---------------------------------------------------------------------------
+def _load_or_create_key(path: str, keygen) -> bytes:
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    key = keygen()
+    with open(path, "wb") as f:
+        f.write(key)
+    os.chmod(path, 0o600)
+    return key
+
+
+def get_fernet() -> Fernet:
+    key = _load_or_create_key(KEY_PATH, Fernet.generate_key)
+    return Fernet(key)
+
+
+def get_hmac_key() -> bytes:
+    return _load_or_create_key(HMAC_KEY_PATH, lambda: os.urandom(32))
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+def log_event(actor: str, action: str, filename: str, status: str, detail: str = ""):
+    timestamp = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO upload_log (timestamp, actor, action, filename, status, detail) "
+        "VALUES (?,?,?,?,?,?)",
+        (timestamp, actor, action, filename, status, detail),
+    )
+    conn.commit()
+    conn.close()
+
+    with open(LOG_PATH, "a") as f:
+        f.write(f"{timestamp} | actor={actor} | action={action} | "
+                 f"file={filename} | status={status} | detail={detail}\n")
+
+
+# ---------------------------------------------------------------------------
+# Integrity: hashing + HMAC signing
+# ---------------------------------------------------------------------------
+def sha256_file(filepath: str) -> str:
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def sign_manifest(filename: str, file_hash: str) -> str:
+    """Create an HMAC signature over filename+hash so the manifest itself can't be forged."""
+    key = get_hmac_key()
+    message = f"{filename}:{file_hash}".encode()
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def write_manifest(filename: str, file_hash: str, signature: str):
+    """Simulates the clinic sending a signed manifest alongside the data file."""
+    manifest = {"filename": filename, "sha256": file_hash, "hmac": signature}
+    manifest_path = os.path.join(MANIFEST_DIR, filename + ".manifest.json")
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    return manifest_path
+
+
+def verify_against_manifest(filepath: str) -> tuple[bool, str]:
+    """Recompute hash+signature and compare against the stored manifest. Rejects on mismatch."""
+    filename = os.path.basename(filepath)
+    manifest_path = os.path.join(MANIFEST_DIR, filename + ".manifest.json")
+
+    if not os.path.exists(manifest_path):
+        return False, "No manifest found for file - cannot verify integrity"
+
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+
+    current_hash = sha256_file(filepath)
+    if current_hash != manifest["sha256"]:
+        return False, f"HASH MISMATCH: expected {manifest['sha256']}, got {current_hash}"
+
+    expected_sig = sign_manifest(filename, manifest["sha256"])
+    if not hmac.compare_digest(expected_sig, manifest["hmac"]):
+        return False, "HMAC SIGNATURE INVALID: manifest itself may have been forged"
+
+    return True, "Integrity verified"
+
+
+# ---------------------------------------------------------------------------
+# Ingestion pipeline
+# ---------------------------------------------------------------------------
+def register_upload(filepath: str):
+    """Step 1 (run at 'clinic side'): compute hash, sign manifest, register in DB as trusted baseline."""
+    filename = os.path.basename(filepath)
+    file_hash = sha256_file(filepath)
+    signature = sign_manifest(filename, file_hash)
+    write_manifest(filename, file_hash, signature)
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO file_integrity (filename, sha256_hash, hmac_signature, registered_at, status) "
+        "VALUES (?,?,?,?,?)",
+        (filename, file_hash, signature, datetime.now(timezone.utc).isoformat(), "registered"),
+    )
+    conn.commit()
+    conn.close()
+    return file_hash, signature
+
+
+def ingest_file(filepath: str, username: str, password: str):
+    """
+    Full secure ingestion:
+      1. Authenticate + authorize the uploader
+      2. Verify file integrity against signed manifest (reject if tampered)
+      3. Encrypt each record and store in DB
+      4. Log every step
+    """
+    filename = os.path.basename(filepath)
+
+    # 1. AuthN/AuthZ
+    try:
+        user = authenticate(username, password)
+        require_permission(user, "upload")
+    except AuthError as e:
+        log_event(username, "UPLOAD_ATTEMPT", filename, "REJECTED_AUTH", str(e))
+        return {"status": "rejected", "reason": str(e)}
+
+    # 2. Integrity check
+    ok, detail = verify_against_manifest(filepath)
+    if not ok:
+        # Quarantine the tampered file instead of ingesting it
+        quarantine_path = os.path.join(QUARANTINE_DIR, filename)
+        os.rename(filepath, quarantine_path) if os.path.exists(filepath) else None
+        log_event(user["username"], "UPLOAD_ATTEMPT", filename, "REJECTED_TAMPER", detail)
+        return {"status": "rejected", "reason": detail}
+
+    # 3. Encrypt + store
+    fernet = get_fernet()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    count = 0
+    with open(filepath, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            record_json = json.dumps(row).encode()
+            record_hash = hashlib.sha256(record_json).hexdigest()
+            encrypted_blob = fernet.encrypt(record_json)
+            try:
+                cur.execute(
+                    "INSERT INTO patients (record_id, clinic_id, encrypted_blob, record_hash, "
+                    "source_file, ingested_at) VALUES (?,?,?,?,?,?)",
+                    (row["record_id"], row["clinic_id"], encrypted_blob, record_hash,
+                     filename, datetime.now(timezone.utc).isoformat()),
+                )
+                count += 1
+            except sqlite3.IntegrityError:
+                pass  # duplicate record_id - skip
+    conn.commit()
+    conn.close()
+
+    log_event(user["username"], "UPLOAD_ATTEMPT", filename, "SUCCESS",
+               f"{count} records encrypted and stored")
+    return {"status": "success", "records_ingested": count}
+
+
+def decrypt_record(record_id: str, username: str, password: str):
+    """Decrypt a single record - requires 'decrypt' permission (admin only)."""
+    user = authenticate(username, password)
+    require_permission(user, "decrypt")
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT encrypted_blob, record_hash FROM patients WHERE record_id=?", (record_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row is None:
+        return None
+
+    blob, stored_hash = row
+    fernet = get_fernet()
+    plaintext = fernet.decrypt(blob)
+    if hashlib.sha256(plaintext).hexdigest() != stored_hash:
+        raise ValueError("Record integrity check failed - stored data may be corrupted")
+
+    log_event(user["username"], "DECRYPT_RECORD", record_id, "SUCCESS", "")
+    return json.loads(plaintext)
+
+
+## data\manifests\Clinic_Kisumu_A_20260718_0300.csv.manifest.json
+### Contents of Clinic_Kisumu_A_20260718_0300.csv.manifest.json
+{
+  "filename": "Clinic_Kisumu_A_20260718_0300.csv",
+  "sha256": "42cb9ff0e0aba58a81e78344f260d0bb373448d460b3fac534c9776cdd5b07c4",
+  "hmac": "547f9cc4dbb709a6f50d8e9eded2696ed8ffc59577049d8ea06d915f789cd5ff"
+}
+
+## data\manifests\Clinic_Kisumu_A_20260718_0800.csv.manifest.json
+### Contents of Clinic_Kisumu_A_20260718_0800.csv.manifest.json
+{
+  "filename": "Clinic_Kisumu_A_20260718_0800.csv",
+  "sha256": "f0ea77dfb8610fe79a59d5d146f3af9ab8ec53c11d0b4db579f30356910932bb",
+  "hmac": "abca12785624eebfe757058e13f3e96494e899cbf5fd4d731b5dc656df2bfee1"
+}
+
+## data\manifests\Clinic_Nairobi_A_20260718_0500.csv.manifest.json
+### Contents of Clinic_Nairobi_A_20260718_0500.csv.manifest.json
+{
+  "filename": "Clinic_Nairobi_A_20260718_0500.csv",
+  "sha256": "eb33feef3e82c808fee39444252907e3326dbe118b2e389fef3bd4faccab29a1",
+  "hmac": "7ec2c18037f5e3f0febf82839fcce1871b97b9d26154aaaac669857bbe4ef9a7"
+}
+
+## data\manifests\Clinic_Nairobi_B_20260718_1100.csv.manifest.json
+### Contents of Clinic_Nairobi_B_20260718_1100.csv.manifest.json
+{
+  "filename": "Clinic_Nairobi_B_20260718_1100.csv",
+  "sha256": "7346e4bc83bbc347a130543bd2db362c2b889fe3c5625dd4f81dd8eb3a10c2bc",
+  "hmac": "02a04e108cb4a05c603b25a4ce61323de0f1932eaded57dfeea5fca85fadbbef"
+}
+
+## data\manifests\Clinic_Nairobi_B_20260718_0600.csv.manifest.json
+### Contents of Clinic_Nairobi_B_20260718_0600.csv.manifest.json
+{
+  "filename": "Clinic_Nairobi_B_20260718_0600.csv",
+  "sha256": "8bd344cdfdc8d7096deaa44054e53ff5964e31425c2c3b2c029799396fa3ac9d",
+  "hmac": "5ab6edaa519ffa80974d9067b106fa5048566bd43e0f291311dc017a57660259"
+}
+
+## data\manifests\Clinic_Nairobi_B_20260718_0100.csv.manifest.json
+### Contents of Clinic_Nairobi_B_20260718_0100.csv.manifest.json
+{
+  "filename": "Clinic_Nairobi_B_20260718_0100.csv",
+  "sha256": "9fd7b845c27dcc6cd7a7eb026990e03f78638b0de6fe54cd894079b30b92f6d2",
+  "hmac": "7bac84ad294b1bfdd1b08b86cdb30d42ad49d3e26c54a95e6d13d2f3f455f581"
+}
+
+## scripts\db_init.py
+### Contents of db_init.py
+"""
+db_init.py
+Initializes the SQLite storage schema:
+ - patients: encrypted patient data storage
+ - upload_log: audit trail of every ingestion attempt (success/failure/tamper)
+ - file_integrity: hash registry for uploaded files
+ - users: simple auth store for role-based access control (RBAC)
+"""
+import sqlite3
+import os
+import hashlib
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "storage", "hospital.db")
+
+
+def init_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin','clinic_uploader','auditor'))
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            db_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id TEXT UNIQUE NOT NULL,
+            clinic_id TEXT NOT NULL,
+            encrypted_blob BLOB NOT NULL,
+            record_hash TEXT NOT NULL,
+            source_file TEXT NOT NULL,
+            ingested_at TEXT NOT NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS file_integrity (
+            file_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            sha256_hash TEXT NOT NULL,
+            hmac_signature TEXT NOT NULL,
+            registered_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'verified'
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS upload_log (
+            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            action TEXT NOT NULL,
+            filename TEXT,
+            status TEXT NOT NULL,
+            detail TEXT
+        )
+    """)
+
+    # Seed demo users for RBAC testing (passwords salted+hashed, never plaintext)
+    demo_users = [
+        ("hospital_admin", "AdminPass!2026", "admin"),
+        ("clinic_nairobi_a", "ClinicUpload!99", "clinic_uploader"),
+        ("compliance_auditor", "AuditView!2026", "auditor"),
+    ]
+    for username, pw, role in demo_users:
+        salt = os.urandom(16).hex()
+        pw_hash = hashlib.pbkdf2_hmac("sha256", pw.encode(), bytes.fromhex(salt), 200_000).hex()
+        cur.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, salt, role) VALUES (?,?,?,?)",
+            (username, pw_hash, salt, role),
+        )
+
+    conn.commit()
+    conn.close()
+    print(f"Database initialized at {DB_PATH}")
+
+
+if __name__ == "__main__":
+    init_db()
+

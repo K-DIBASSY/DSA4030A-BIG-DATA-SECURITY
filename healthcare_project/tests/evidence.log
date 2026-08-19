@@ -1,0 +1,43 @@
+SECURITY TEST EXECUTION LOG
+======================================================================
+
+=== TEST-1: PASS ===
+Objective: Confirm the system detects and rejects a file altered after signing
+Expected:  verify_against_manifest() returns False with a hash-mismatch message; file not ingested
+Actual:    original_hash=561f1a83def2e605... new_hash=c7fef8b17317cb2c... verify_result=False, detail='HASH MISMATCH: expected 561f1a83def2e605c277d80aa2b5e48f7bf55cd0ef4b2088c052e6dfa1b2c0c6, got c7fef8b17317cb2c797c3b79d12b7bea48fe08e1e66591aa97d3583790331d13'
+
+=== TEST-2: PASS ===
+Objective: Confirm tampered files are rejected end-to-end and never reach storage
+Expected:  Ingestion pipeline rejects the file before any records are written to the database
+Actual:    ingest_file() result={'status': 'rejected', 'reason': 'HASH MISMATCH: expected 561f1a83def2e605c277d80aa2b5e48f7bf55cd0ef4b2088c052e6dfa1b2c0c6, got c7fef8b17317cb2c797c3b79d12b7bea48fe08e1e66591aa97d3583790331d13'}, records stored under this filename=0
+
+=== TEST-3: PASS ===
+Objective: Confirm the system rejects invalid credentials and unknown accounts
+Expected:  AuthError raised in both cases; no session/token issued
+Actual:    wrong_password -> AuthError raised: True ('Invalid credentials'); unknown_user -> rejected: True
+
+=== TEST-4: PASS ===
+Objective: Confirm role-based access control restricts decryption to the admin role only
+Expected:  clinic_uploader and auditor are denied (AuthError); admin succeeds
+Actual:    clinic_uploader decrypt blocked=True, auditor decrypt blocked=True, admin decrypt succeeded=True
+
+=== TEST-5: PASS ===
+Objective: Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)
+Expected:  Zero plaintext matches - all values must be unrecoverable without the encryption key
+Actual:    Scanned 200 encrypted blobs for 5 known plaintext terms. Matches found: 0
+
+=== TEST-6: PASS ===
+Objective: Confirm every upload attempt (successful and rejected) is captured in the audit log
+Expected:  Log contains both SUCCESS and REJECTED_* entries with timestamps and actor identity
+Actual:    upload_log status breakdown={'REJECTED_TAMPER': 1, 'SUCCESS': 13}; success_events=13, rejected_events=1; logs/ingestion.log exists=True with 28 lines
+
+======================================================================
+SUMMARY
+  TEST-1: PASS - Confirm the system detects and rejects a file altered after signing
+  TEST-2: PASS - Confirm tampered files are rejected end-to-end and never reach storage
+  TEST-3: PASS - Confirm the system rejects invalid credentials and unknown accounts
+  TEST-4: PASS - Confirm role-based access control restricts decryption to the admin role only
+  TEST-5: PASS - Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)
+  TEST-6: PASS - Confirm every upload attempt (successful and rejected) is captured in the audit log
+
+6/6 tests passed

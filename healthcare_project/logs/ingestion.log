@@ -1,0 +1,28 @@
+2026-07-19T19:14:35.807020+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Kisumu_A_20260718_0300.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:36.438380+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Kisumu_A_20260718_0800.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:37.062224+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Mombasa_A_20260718_0200.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:37.737424+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Mombasa_A_20260718_0700.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:38.441795+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_0000.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:39.087543+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_0500.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:39.748262+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_1000.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:40.428509+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_0100.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:41.112225+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_0600.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:41.808592+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_1100.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:42.508131+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nakuru_A_20260718_0400.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:14:43.219123+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nakuru_A_20260718_0900.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-19T19:15:26.277487+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=test1_tampered.csv | status=REJECTED_TAMPER | detail=HASH MISMATCH: expected b02c6bc10c10e0b55eeea6147ef12d380d97d1d2738682460ede1332a4e65be9, got 5dfc8c2985ea0a2389bc37dca8c2f914e24b8784796df65768d58e2d981dac71
+2026-07-19T19:15:26.569923+00:00 | actor=hospital_admin | action=DECRYPT_RECORD | file=00002ffd-ee23-4b82-90c7-527a9b5a1184 | status=SUCCESS | detail=
+2026-07-23T06:36:29.234061+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Kisumu_A_20260718_0300.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:30.606773+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Kisumu_A_20260718_0800.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:32.192230+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Mombasa_A_20260718_0200.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:33.648136+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Mombasa_A_20260718_0700.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:35.145149+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_0000.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:36.405795+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_0500.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:37.615303+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_A_20260718_1000.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:38.941974+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_0100.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:40.277023+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_0600.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:41.607593+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nairobi_B_20260718_1100.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:43.084164+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nakuru_A_20260718_0400.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:36:44.542348+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=Clinic_Nakuru_A_20260718_0900.csv | status=SUCCESS | detail=10000 records encrypted and stored
+2026-07-23T06:37:42.523568+00:00 | actor=clinic_nairobi_a | action=UPLOAD_ATTEMPT | file=test1_tampered.csv | status=REJECTED_TAMPER | detail=HASH MISMATCH: expected 561f1a83def2e605c277d80aa2b5e48f7bf55cd0ef4b2088c052e6dfa1b2c0c6, got c7fef8b17317cb2c797c3b79d12b7bea48fe08e1e66591aa97d3583790331d13
+2026-07-23T06:37:43.159727+00:00 | actor=hospital_admin | action=DECRYPT_RECORD | file=0000afaf-34a1-4c6c-93ca-1b159844a7df | status=SUCCESS | detail=

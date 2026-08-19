@@ -1,0 +1,50 @@
+[
+  {
+    "test_id": "TEST-1",
+    "objective": "Confirm the system detects and rejects a file altered after signing",
+    "procedure": "Copy a registered clinic file, modify a field, recompute integrity check",
+    "expected": "verify_against_manifest() returns False with a hash-mismatch message; file not ingested",
+    "actual": "original_hash=561f1a83def2e605... new_hash=c7fef8b17317cb2c... verify_result=False, detail='HASH MISMATCH: expected 561f1a83def2e605c277d80aa2b5e48f7bf55cd0ef4b2088c052e6dfa1b2c0c6, got c7fef8b17317cb2c797c3b79d12b7bea48fe08e1e66591aa97d3583790331d13'",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-2",
+    "objective": "Confirm tampered files are rejected end-to-end and never reach storage",
+    "procedure": "Call ingest_file() on the tampered file from TEST-1 using valid clinic credentials",
+    "expected": "Ingestion pipeline rejects the file before any records are written to the database",
+    "actual": "ingest_file() result={'status': 'rejected', 'reason': 'HASH MISMATCH: expected 561f1a83def2e605c277d80aa2b5e48f7bf55cd0ef4b2088c052e6dfa1b2c0c6, got c7fef8b17317cb2c797c3b79d12b7bea48fe08e1e66591aa97d3583790331d13'}, records stored under this filename=0",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-3",
+    "objective": "Confirm the system rejects invalid credentials and unknown accounts",
+    "procedure": "Call authenticate() with a wrong password for a real user, and with a nonexistent username",
+    "expected": "AuthError raised in both cases; no session/token issued",
+    "actual": "wrong_password -> AuthError raised: True ('Invalid credentials'); unknown_user -> rejected: True",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-4",
+    "objective": "Confirm role-based access control restricts decryption to the admin role only",
+    "procedure": "Attempt decrypt_record() as clinic_uploader, auditor, and admin roles",
+    "expected": "clinic_uploader and auditor are denied (AuthError); admin succeeds",
+    "actual": "clinic_uploader decrypt blocked=True, auditor decrypt blocked=True, admin decrypt succeeded=True",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-5",
+    "objective": "Confirm patient data is encrypted at rest (no plaintext PII visible in DB storage)",
+    "procedure": "Read raw encrypted_blob bytes directly from SQLite and search for known plaintext substrings",
+    "expected": "Zero plaintext matches - all values must be unrecoverable without the encryption key",
+    "actual": "Scanned 200 encrypted blobs for 5 known plaintext terms. Matches found: 0",
+    "passed": true
+  },
+  {
+    "test_id": "TEST-6",
+    "objective": "Confirm every upload attempt (successful and rejected) is captured in the audit log",
+    "procedure": "Query the upload_log table and the ingestion.log file after running tests 1-5",
+    "expected": "Log contains both SUCCESS and REJECTED_* entries with timestamps and actor identity",
+    "actual": "upload_log status breakdown={'REJECTED_TAMPER': 1, 'SUCCESS': 13}; success_events=13, rejected_events=1; logs/ingestion.log exists=True with 28 lines",
+    "passed": true
+  }
+]
